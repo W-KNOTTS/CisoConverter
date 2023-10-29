@@ -8,6 +8,7 @@ using CisoConverter;
 using Microsoft.Win32;
 using System.Media;
 using System.Reflection;
+using System.Net.Security;
 
 namespace CisoConverter
 {
@@ -38,40 +39,56 @@ namespace CisoConverter
 
         private async void button_Click(object sender, RoutedEventArgs e)
         {
+            // Validate the input ISO path.
             if (!textBox.Text.EndsWith(".iso") || !File.Exists(textBox.Text))
             {
-                MessageBox.Show("Please add your ISO path to coninue\nPlease make sure your file is in that path.");
+                MessageBox.Show("Please add your ISO path to continue\nPlease make sure your file is in that path.");
+                return;
             }
             else
             {
+                CsoCompressionStream csoStream = null;  // Declare csoStream outside Task.Run
+
+                // Run the time-consuming operation on a separate thread.
                 await Task.Run(() =>
                 {
-                    csoPath = IMGPATH.Substring(0, IMGPATH.Length - 4); // Remove the .iso from the string
+                    // Generate the CSO path by trimming the last 4 characters to remove the ".iso" extension.
+                    csoPath = IMGPATH.Substring(0, IMGPATH.Length - 4);
 
-                    // Initialize your input FileStream
+                    // Open the input ISO and output CSO streams.
                     using (FileStream inputStream = new FileStream(IMGPATH, FileMode.Open, FileAccess.Read))
-                    using (FileStream baseStream = new FileStream($@"{csoPath}.cso", FileMode.OpenOrCreate, FileAccess.Write))
+                    using (FileStream baseStream = new FileStream($"{csoPath}.cso", FileMode.OpenOrCreate, FileAccess.Write))
                     {
-                        byte[] buffer = new byte[inputStream.Length]; // Create buffer
-                        inputStream.Read(buffer, 0, buffer.Length); // Read file to buffer
+                        long totalBytes = inputStream.Length;
+                        byte[] buffer = new byte[8192];  // Use an 8KB buffer for reading.
 
-                        long totalBytes = inputStream.Length; // Initialize your totalBytes variable
+                        // Initialize the CsoCompressionStream
+                        csoStream = new CsoCompressionStream(baseStream, totalBytes);
 
-                        // Create an instance of CsoCompressionStream
-                        using (CsoCompressionStream csoStream = new CsoCompressionStream(baseStream, totalBytes))
+                        // Set paths for the CSO file
+                        csoStream.myCsoPath(csoPath, IMGPATH.Substring(0, IMGPATH.Length - 4));
+
+                        // Subscribe to the ProgressChanged event for updating the progress bar.
+                        csoStream.ProgressChanged += UpdateProgressBar;
+
+                        int bytesRead;
+
+                        // Read the ISO file in chunks and write it to the CSO file.
+                        while ((bytesRead = inputStream.Read(buffer, 0, buffer.Length)) > 0)
                         {
-                            csoStream.ProgressChanged += UpdateProgressBar; // Subscribe to ProgressChanged event
-                            csoStream.Write(buffer, 0, buffer.Length); // Write buffer to csoStream
-                            csoStream.Flush(); // Flush the stream
+                            csoStream.Write(buffer, 0, bytesRead);
                         }
+
+                        csoStream.Flush();  // Ensure all data is written and buffered data is flushed.
                     }
                 });
 
-                string xbeTitle = Path.GetFileName(csoPath); // Get the file name from csoPath
+                csoStream?.splitCSO();  // Call splitCSO() on csoStream if it is not null.
 
-                xbeTitle titleModifier = new xbeTitle(xbeTitle); // Create an instance of xbeTitle class
+                // Continue with the rest of your existing code (not modified)
+                string xbeTitle = Path.GetFileName(csoPath);
+                xbeTitle titleModifier = new xbeTitle(xbeTitle);
 
-                // Create and start a new task for looping system sound
                 CancellationTokenSource cts = new CancellationTokenSource();
                 Task soundLoopTask = Task.Run(() =>
                 {
@@ -82,17 +99,16 @@ namespace CisoConverter
                     }
                 });
 
-                // Show MessageBox
                 MessageBoxResult result = MessageBox.Show($"Compression finished\nYour {xbeTitle}.cso is in the same directory as your selected {xbeTitle}.iso.\nYour XBE for this title is in the 'xbe' directory");
 
-                // Stop looping system sound when 'OK' is clicked
                 if (result == MessageBoxResult.OK)
                 {
                     cts.Cancel();
-                    soundLoopTask.Wait(); // Wait for the task to complete its work
+                    soundLoopTask.Wait();
                 }
             }
         }
+
 
 
         private async void decompressButton_Click(object sender, RoutedEventArgs e)

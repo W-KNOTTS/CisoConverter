@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using K4os.Compression.LZ4;
 
@@ -31,7 +32,15 @@ namespace CisoConverter
         private readonly int _align = 2;
         private readonly int _alignBytes;
         private readonly LZ4Level _compressionLevel;
+        String myCSO = "";
+        String FullPath = "";
+        long maxSize = 4285913201L;
 
+        public void myCsoPath(string mycso, string csoPATH)
+        {
+            FullPath = csoPATH;
+            myCSO = mycso;
+        }
         // Constructor for the class
         public CsoCompressionStream(Stream baseStream, long totalBytes, LZ4Level compressionLevel = LZ4Level.L12_MAX, int blockSize = 2048)
         {
@@ -76,6 +85,43 @@ namespace CisoConverter
                 _writeBase.Write(b);
             }
         }
+        // Added function to split the .cso file into multiple files
+        public void SplitCsoFile(string csoPath)
+        {
+            
+            // Open the source file for reading
+            using (var sourceStream = new FileStream(csoPath, FileMode.Open, FileAccess.Read))
+            {
+                int partNumber = 1;
+                long bytesRemaining = sourceStream.Length;
+                byte[] buffer = new byte[1024 * 1024]; // 1 MB buffer
+
+                while (bytesRemaining > 0)
+                {
+                    string newFileName = $"{csoPath}.{partNumber}.cso";
+                    using (var destinationStream = new FileStream(newFileName, FileMode.Create, FileAccess.Write))
+                    {
+                        long writtenBytes = 0;
+                        while (writtenBytes < maxSize)
+                        {
+                            int bytesRead = sourceStream.Read(buffer, 0, buffer.Length);
+                            if (bytesRead == 0)
+                            {
+                                break;
+                            }
+
+                            destinationStream.Write(buffer, 0, bytesRead);
+                            bytesRemaining -= bytesRead;
+                            writtenBytes += bytesRead;
+                        }
+                    }
+
+                    partNumber++;
+                }
+            }
+        }
+
+
 
         // Write to the compression stream
         public override void Write(byte[] buffer, int offset, int count)
@@ -147,6 +193,20 @@ namespace CisoConverter
                     _blockIndex[_numBlocks] = (uint)((Position > FileSplitBoundary ? Position - FileSplitBoundary : Position) >> _align);
                     WriteBlockIndex();
                 }
+            }
+        }
+       
+        public void splitCSO()
+        {
+            //if ($@"{myCSO}.cso" >= maxSize)
+            FileInfo fileInfo = new FileInfo($@"{FullPath}.cso");
+            long fileSize = fileInfo.Length;
+
+            // Check if the file size exceeds the maximum allowed size
+            if (fileSize >= maxSize)
+            {
+                // Perform the split
+                SplitCsoFile($@"{FullPath}.cso");
             }
         }
 
