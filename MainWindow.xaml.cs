@@ -25,8 +25,6 @@ namespace CisoConverter
             InitializeComponent();
         }
 
-        
-
         private void UpdateProgressBar(double percentage)
         {
             // Assuming progressBar is your ProgressBar control
@@ -85,7 +83,6 @@ namespace CisoConverter
 
                 csoStream?.splitCSO();  // Call splitCSO() on csoStream if it is not null.
 
-                // Continue with the rest of your existing code (not modified)
                 string xbeTitle = Path.GetFileName(csoPath);
                 xbeTitle titleModifier = new xbeTitle(xbeTitle);
 
